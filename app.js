@@ -74,6 +74,36 @@ app.use('/ext/getaddress/:hash', function(req,res){
   });
 });
 
+app.use('/ext/getaddresses', function(req,res){
+  const addresses = req.body;
+  db.get_addresses(addresses, function(addresses) {
+    var hashes = addresses.map((address) => {
+      if (address && address.txs) {
+        return address.txs.reverse();
+      } else {
+        return [];
+      }
+    }).reduce((prev, currentHashes) => {
+      return prev.concat(currentHashes);
+    }, []);
+    var txs = [];
+    var count = hashes.length;
+    lib.syncLoop(count, function (loop) {
+      var i = loop.iteration();
+      db.get_tx(hashes[i].addresses, function(tx) {
+        if (tx) {
+          txs.push(tx);
+          loop.next();
+        } else {
+          loop.next();
+        }
+      });
+    }, function () {
+      res.send(txs);
+    });
+  });
+});
+
 app.use('/ext/getbalance/:hash', function(req,res){
   db.get_address(req.param('hash'), function(address){
     if (address) {
