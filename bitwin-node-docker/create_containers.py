@@ -4,6 +4,9 @@ import subprocess
 import os
 import time
 
+# explorer ip
+ip = "127.0.0.1:4444"
+
 # hostname -I (first ip)
 ip = "192.168.88.204"
 
@@ -167,11 +170,27 @@ rpc("invalidateblock " + fork_block_hash, "Delete block", 2, 1)
 # check account balance
 rpc("getbalance " + receiver, "Balance after block delete", 2, 1)
 
-rpc("getbalance", "Node 1 balance", 2, 1)
-
 
 rpc("getbalance", "Node 1 balance", 2, 1)
 
+
+# get fork block hash
+fork_block_hash = rpc("getbestblockhash", "Fork block hash node1", 2, 1)
+
+# get fork block
+fork_block = json.loads(rpc("getblock " + fork_block_hash, "Fork block node1", 2, 1))
+
+notify("Please turn off the SCRIPT.sh. You have 20sec\n", 2)
+time.sleep(20)
+
+# get fork block hash
+fork_block_hash = rpc("getbestblockhash", "Fork block hash node1", 2, 1)
+
+# get fork block
+fork_block = json.loads(rpc("getblock " + fork_block_hash, "Fork block node1", 2, 1))
+
+rpc("setgenerate true 1", "Start mining node1", 2, 1)
+rpc("setgenerate false", "Stop mining node1", 2, 1)
 
 
 """
