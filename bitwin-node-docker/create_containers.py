@@ -143,27 +143,30 @@ rpc("getbalance", "Node 1 balance", 2, 1)
 
 # get fork block hash
 fork_block_hash = rpc("getbestblockhash", "Fork block hash node1", 2, 1)
-"""
-        # get fork block
-        fork_block = json.loads(rpc("getblock " + fork_block_hash, "Fork block node1", 2, 1))
-        print(fork_block, type(fork_block))
 
-        # get tx from block
-        tx = json.loads(rpc("gettransaction " + fork_block["tx"][0], "Get tx info", 2, 1))["details"][0]
+# get fork block
+fork_block = json.loads(rpc("getblock " + fork_block_hash, "Fork block node1", 2, 1))
+print(fork_block, type(fork_block))
 
-        # get transfer info
-        receiver = tx["address"]
-        notify(json.dumps(receiver), 3)
+# get tx from block
+tx = json.loads(rpc("gettransaction " + fork_block["tx"][0], "Get tx info", 2, 1))["details"][0]
 
-        # check account balance
-        rpc("getbalance " + receiver, "Balance before block delete", 2, 1)
-"""
+# get transfer info
+receiver = tx["address"]
+notify(json.dumps(receiver), 3)
+
+# check account balance
+rpc("getbalance " + receiver, "Balance before block delete", 2, 1)
+
+notify("wait 1.5sec\n", 2)
+time.sleep(20)
+
 # delete block
 rpc("invalidateblock " + fork_block_hash, "Delete block", 2, 1)
-"""
-        # check account balance
-    rpc("getbalance " + receiver, "Balance after block delete", 2, 1)
-"""
+
+# check account balance
+rpc("getbalance " + receiver, "Balance after block delete", 2, 1)
+
 rpc("getbalance", "Node 1 balance", 2, 1)
 
 
