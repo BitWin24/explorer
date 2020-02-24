@@ -177,6 +177,7 @@ is_locked(function (exists) {
                     });
                   } else if (mode == 'update') {
                     console.log("UPDATE=========>                   start = " + stats.last);
+                    // fix of the case when node chain is shorter then explorer chain
                     if (stats.last < 0) {
                       stats.last = 1;
                     }

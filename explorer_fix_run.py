@@ -3,6 +3,14 @@ import json
 import subprocess
 import os
 import time
+import pprint
+import pymongo
+from pymongo import MongoClient
+
+# mongo
+client = MongoClient('localhost', 27017)
+db = client["explorerdb"]
+collection = db["txes"]
 
 # explorer ip
 ip = "127.0.0.1:4444"
@@ -35,14 +43,15 @@ def notify(msg, size):
     elif size == 5:
         print("============================================= END\n\n")
 
-def execute_command(command, params, desc, print_it=0):
+def execute_command(command, params, desc, print_it=0, background=0):
     if desc:
         notify(desc, print_it)
     proc = subprocess.Popen([command, params], stdout=subprocess.PIPE, shell=True)
-    (out, err) = proc.communicate()
-    if print_it:
-        print ("out:\n" +  out.decode("utf-8"), end="")
-    return out.decode("utf-8") 
+    if not background:
+        (out, err) = proc.communicate()
+        if print_it:
+            print ("out:\n" +  out.decode("utf-8"), end="")
+        return out.decode("utf-8") 
 
 def delete_old_containers():
     notify("Delete old containers", 1)
@@ -103,94 +112,234 @@ def run_node(number):
     notify("wait 1.5sec\n", 2)
     time.sleep(1.5)
 
-def rpc(command, msg, size, number):
+def rpc(command, msg, size, number, print_command=2):
 
     # rpc command
     notify(msg, size)
     if number == 1:
-        return execute_command("sudo docker exec -it " + container1_name + " ./bitwin24-node/src/bitwin24-cli -rpcuser=rpcuser -rpcpassword=rpcpassword -rpcport=" + container1_rpc_ports[:4] + " " + command, "", "", 3)
+        return execute_command("sudo docker exec -it " + container1_name + " ./bitwin24-node/src/bitwin24-cli -rpcuser=rpcuser -rpcpassword=rpcpassword -rpcport=" + container1_rpc_ports[:4] + " " + command, "", "", print_command)
     elif number == 2:
-        return execute_command("sudo docker exec -it " + container2_name + " ./bitwin24-node/src/bitwin24-cli -rpcuser=rpcuser -rpcpassword=rpcpassword -rpcport=" + container2_rpc_ports[:4] + " " + command, "", "", 3)
+        return execute_command("sudo docker exec -it " + container2_name + " ./bitwin24-node/src/bitwin24-cli -rpcuser=rpcuser -rpcpassword=rpcpassword -rpcport=" + container2_rpc_ports[:4] + " " + command, "", "", print_command)
+
+def drop_mongo():
+    execute_command("mongo explorerdb --eval \"db.dropDatabase()\"", "", "Drop database", 0, 1)
+
+def create_mongo():
+    execute_command("mongo explorerdb --eval \"db.createUser( { user: \"iquidus\", pwd: \"3xp!0reR\", roles: [ \"readWrite\" ] } )\"", "", "Load new database", 0, 1)
+    execute_command("mongo explorerdb --eval \"use explorerdb\"", "", "", 0, 1)
+
+def stop_explorer():
+    pid = execute_command("ps -ef | grep 'node --stack-size' | awk '{print $2}'", "", "", 0, 0)
+    pid_array = pid.split('\n')
+    for i in pid_array[:-1]:
+        execute_command("sudo kill " + i, "", "Process " + i + " terminating", 3, 0)
+
+def run_explorer():
+    execute_command("npm run start", "", "", 0, 1)
 
 
+def run_sync_script():
+    execute_command("rm -rf tmp/index.pid", "", "", 1, 0)
+    execute_command("node scripts/sync.js index update", "", "", 1, 0)
+
+def get_explorer_txs():
+    txs = collection.find({}).sort("blockindex")
+    last_tx = {}
+    for tx in txs:
+        # pprint.pprint(tx)
+        last_tx = tx
+    return last_tx
+
+notify("Explorer setup", 1)
+drop_mongo()
+create_mongo()
+stop_explorer()
+run_explorer()
 
 delete_old_containers()
 create_new_containers()
 start_containers()
 
-
 run_node(1)
-run_node(2)
 
 rpc("getinfo", "Getinfo node 1", 2, 1)
-#rpc("getinfo", "Getinfo node 2", 2, 2)
 
 rpc("setgenerate true 100", "Start mining node1", 2, 1)
-#rpc("setgenerate true 1", "Start mining node2", 2, 2)
     
-notify("wait 1.5sec\n", 2)
-time.sleep(5)
+notify("wait 10sec\n", 2)
+time.sleep(10)
 
 rpc("setgenerate false", "Stop mining node1", 2, 1)
-#rpc("setgenerate false", "Stop mining node2", 2, 2)
 
 notify("wait 1.5sec\n", 2)
 time.sleep(1.5)
 
 rpc("getinfo", "Getinfo node 1", 2, 1)
-#rpc("getinfo", "Getinfo node 2", 2, 2)
-
-rpc("getbalance", "Node 1 balance", 2, 1)
-#rpc("getbalance", "Node 2 balance", 2, 2)
-
-
-# get fork block hash
-fork_block_hash = rpc("getbestblockhash", "Fork block hash node1", 2, 1)
-
-# get fork block
-fork_block = json.loads(rpc("getblock " + fork_block_hash, "Fork block node1", 2, 1))
-print(fork_block, type(fork_block))
-
-# get tx from block
-tx = json.loads(rpc("gettransaction " + fork_block["tx"][0], "Get tx info", 2, 1))["details"][0]
-
-# get transfer info
-receiver = tx["address"]
-notify(json.dumps(receiver), 3)
-
-# check account balance
-rpc("getbalance " + receiver, "Balance before block delete", 2, 1)
-
-notify("wait 1.5sec\n", 2)
-time.sleep(20)
-
-# delete block
-rpc("invalidateblock " + fork_block_hash, "Delete block", 2, 1)
-
-# check account balance
-rpc("getbalance " + receiver, "Balance after block delete", 2, 1)
-
 
 rpc("getbalance", "Node 1 balance", 2, 1)
 
+run_sync_script()
 
-# get fork block hash
-fork_block_hash = rpc("getbestblockhash", "Fork block hash node1", 2, 1)
+notify("wait 5sec\n", 2)
+time.sleep(5)
 
-# get fork block
-fork_block = json.loads(rpc("getblock " + fork_block_hash, "Fork block node1", 2, 1))
+def print_explorer_blocks(last_block):
+    txs = collection.find({}).sort("blockindex")
+    last_tx = {}
+    for tx in txs:
+        print("\n\n INDEX: " + str(tx["blockindex"]))
+        print("=======> Node blockhash: " + rpc("getblockhash " + str(tx["blockindex"]), "", 0, 1, 0))
+        print("=======> Expl blockhash: " + tx["blockhash"])
 
-notify("Please turn off the SCRIPT.sh. You have 20sec\n", 2)
-time.sleep(20)
+def fork_type1():
+    notify("Fork type 1", 1)
+    last_node_block = rpc("getbestblockhash", "Get best block hash", 2, 1)
+    last_explorer_tx = get_explorer_txs()
 
-# get fork block hash
-fork_block_hash = rpc("getbestblockhash", "Fork block hash node1", 2, 1)
+    print("Hash1: ", last_explorer_tx["blockhash"], "Hash2: ", last_node_block[:-2])
+    if last_explorer_tx["blockhash"] != last_node_block[:-2]:
+        notify("Not synced", 2)
+    else:
+        notify("Synced", 2)
 
-# get fork block
-fork_block = json.loads(rpc("getblock " + fork_block_hash, "Fork block node1", 2, 1))
+    # delete block
+    rpc("invalidateblock " + last_node_block, "Delete block", 2, 1)
 
-rpc("setgenerate true 1", "Start mining node1", 2, 1)
-rpc("setgenerate false", "Stop mining node1", 2, 1)
+    notify("wait 1.5sec\n", 2)
+    time.sleep(1.5)
+
+    last_explorer_tx = get_explorer_txs()
+    last_node_block = rpc("getbestblockhash", "Get best block hash", 2, 1)
+
+    print("Hash1: ", last_explorer_tx["blockhash"], "Hash2: ", last_node_block[-2])
+    if last_explorer_tx["blockhash"] != last_node_block[:-2]:
+        notify("Not synced", 2)
+    else:
+        notify("Synced", 2)
+
+
+def fork_type2():
+    notify("Fork type 2", 1)
+    last_node_block = rpc("getbestblockhash", "Get best block hash", 2, 1)
+    last_explorer_tx = get_explorer_txs()
+    fork_block_index = last_explorer_tx["blockindex"] // 2
+    fork_block_hash = rpc("getblockhash " + str(fork_block_index), "", 0, 1)
+
+    print("Hash1: ", last_explorer_tx["blockhash"], "Hash2: ", last_node_block[:-2])
+    if last_explorer_tx["blockhash"] != last_node_block[:-2]:
+        notify("Not synced", 2)
+    else:
+        notify("Synced", 2)
+    
+    notify("Create fork on block " + str(fork_block_index) + " : " + fork_block_hash, 1)
+
+    # delete block
+    rpc("invalidateblock " + fork_block_hash, "Delete block", 2, 1)
+
+    notify("wait 1.5sec\n", 2)
+    time.sleep(1.5)
+
+    # get current block on node
+    fresh_block = rpc("getbestblockhash", "Fork block hash node1", 2, 1)
+    
+    # get fresh block
+    fork_block = json.loads(rpc("getblock " + fresh_block, "Fork block node1", 2, 1))
+    print(fork_block, type(fork_block))
+
+    last_explorer_tx = get_explorer_txs()
+    last_node_block = rpc("getbestblockhash", "Get best block hash", 2, 1)
+
+    print("Hash1: ", last_explorer_tx["blockhash"], "Hash2: ", last_node_block[-2])
+    if last_explorer_tx["blockhash"] != last_node_block[:-2]:
+        notify("Not synced", 2)
+    else:
+        notify("Synced", 2)
+
+    rpc("getinfo", "Getinfo node 1", 2, 1)
+
+    rpc("setgenerate true 100", "Start mining node1", 2, 1)
+        
+    notify("wait 10sec\n", 2)
+    time.sleep(10)
+
+    rpc("setgenerate false", "Stop mining node1", 2, 1)
+
+    notify("wait 1.5sec\n", 2)
+    time.sleep(1.5)
+
+    rpc("getinfo", "Getinfo node 1", 2, 1)
+
+    rpc("getbalance", "Node 1 balance", 2, 1)
+
+    run_sync_script()
+
+    notify("wait 1.5sec\n", 2)
+    time.sleep(1.5)
+
+    # get fork block hash
+    best_hash = rpc("getbestblockhash", "Fork block hash node1", 2, 1)
+
+    # get fork block
+    best_block = json.loads(rpc("getblock " + best_hash, "Fork block node1", 2, 1))
+
+    print_explorer_blocks(best_block["height"])
+
+    run_sync_script()
+
+
+
+# fork_type1()
+fork_type2()
+
+# # get fork block hash
+# fork_block_hash = rpc("getbestblockhash", "Fork block hash node1", 2, 1)
+
+# # get fork block
+# fork_block = json.loads(rpc("getblock " + fork_block_hash, "Fork block node1", 2, 1))
+# print(fork_block, type(fork_block))
+
+# # get tx from block
+# tx = json.loads(rpc("gettransaction " + fork_block["tx"][0], "Get tx info", 2, 1))["details"][0]
+
+# # get transfer info
+# receiver = tx["address"]
+# notify(json.dumps(receiver), 3)
+
+# # check account balance
+# rpc("getbalance " + receiver, "Balance before block delete", 2, 1)
+
+# notify("wait 1.5sec\n", 2)
+# time.sleep(1.5)
+
+# # delete block
+# rpc("invalidateblock " + fork_block_hash, "Delete block", 2, 1)
+
+# # check account balance
+# rpc("getbalance " + receiver, "Balance after block delete", 2, 1)
+
+
+# rpc("getbalance", "Node 1 balance", 2, 1)
+
+
+# # get fork block hash
+# fork_block_hash = rpc("getbestblockhash", "Fork block hash node1", 2, 1)
+
+# # get fork block
+# fork_block = json.loads(rpc("getblock " + fork_block_hash, "Fork block node1", 2, 1))
+
+# notify("Please turn off the SCRIPT.sh. You have 20sec\n", 2)
+# time.sleep(20)
+
+# # get fork block hash
+# fork_block_hash = rpc("getbestblockhash", "Fork block hash node1", 2, 1)
+
+# # get fork block
+# fork_block = json.loads(rpc("getblock " + fork_block_hash, "Fork block node1", 2, 1))
+
+# rpc("setgenerate true 1", "Start mining node1", 2, 1)
+# rpc("setgenerate false", "Stop mining node1", 2, 1)
+
+
 
 
 """
