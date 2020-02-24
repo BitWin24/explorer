@@ -176,17 +176,23 @@ is_locked(function (exists) {
                       });
                     });
                   } else if (mode == 'update') {
-                    console.log("UPDATE=========>                   start = " + stats.last);
+                    console.log("UPDATE =========>                   start = " + stats.last);
                     // fix of the case when node chain is shorter then explorer chain
                     if (stats.last < 0) {
                       stats.last = 1;
                     }
-                    db.update_tx_db(settings.coin, stats.last, stats.count, settings.update_timeout, function(){
-                      db.update_richlist('received', function(){
-                        db.update_richlist('balance', function(){
-                          db.get_stats(settings.coin, function(nstats){
-                            console.log('update complete (block: %s)', nstats.last);
-                            exit();
+                    db.handle_rollback(stats.last, function(newStart) {
+                      if (stats.last != newStart) {
+                        console.log("ROLLBACK TO =========>                   start = " + newStart);
+                      }
+                      console.log("=-=-=-=-=-=- ", stats.last, newStart);
+                      db.update_tx_db(settings.coin, newStart, stats.count, settings.update_timeout, function(){
+                        db.update_richlist('received', function(){
+                          db.update_richlist('balance', function(){
+                            db.get_stats(settings.coin, function(nstats){
+                              console.log('update complete (block: %s)', nstats.last);
+                              exit();
+                            });
                           });
                         });
                       });
