@@ -10,8 +10,8 @@ from pymongo import MongoClient
 # mongo
 client = MongoClient('localhost', 27017)
 db = client["explorerdb"]
-collection = db["txes"]
-
+tx_collection = db["txes"]
+address_collection = db["addresses"]
 # explorer ip
 ip = "127.0.0.1:4444"
 
@@ -94,20 +94,14 @@ def start_containers():
     
     notify("", 5)
 
-
-
-
-
-
-
 def run_node(number):
 
     # run node
     notify("Run node " + str(number), 2)
     if number == 1:
-        execute_command("sudo docker exec -dit " + container1_name + " ./bitwin24-node/src/bitwin24d -txindex=1 -connect=" + ip + container2_ports[:4] + " -daemon=1 -masternode=1 -masternodeprivkey=" + node1_privk + " -listen=1 -rpcallowip=::/0 -server=1 -rpcuser=rpcuser -rpcpassword=rpcpassword -rpcport=" + container1_rpc_ports[:4] + " -port=" + container1_ports[:4], "", "", 0)
+        execute_command("sudo docker exec -dit " + container1_name + " ./bitwin24-node/src/bitwin24d -rescan -txindex=1 -connect=" + ip + container2_ports[:4] + " -daemon=1 -masternode=1 -masternodeprivkey=" + node1_privk + " -listen=1 -rpcallowip=::/0 -server=1 -rpcuser=rpcuser -rpcpassword=rpcpassword -rpcport=" + container1_rpc_ports[:4] + " -port=" + container1_ports[:4], "", "", 0)
     elif number == 2:
-        execute_command("sudo docker exec -dit " + container2_name + " ./bitwin24-node/src/bitwin24d -txindex=1 -connect=" + ip + container1_ports[:4] + " -daemon=1 -masternode=1 -masternodeprivkey=" + node2_privk + " -listen=1 -rpcallowip=::/0 -server=1 -rpcuser=rpcuser -rpcpassword=rpcpassword -rpcport=" + container2_rpc_ports[:4] + " -port=" + container2_ports[:4], "", "", 0)
+        execute_command("sudo docker exec -dit " + container2_name + " ./bitwin24-node/src/bitwin24d -rescan -txindex=1 -connect=" + ip + container1_ports[:4] + " -daemon=1 -masternode=1 -masternodeprivkey=" + node2_privk + " -listen=1 -rpcallowip=::/0 -server=1 -rpcuser=rpcuser -rpcpassword=rpcpassword -rpcport=" + container2_rpc_ports[:4] + " -port=" + container2_ports[:4], "", "", 0)
 
     notify("wait 1.5sec\n", 2)
     time.sleep(1.5)
@@ -137,13 +131,12 @@ def stop_explorer():
 def run_explorer():
     execute_command("npm run start", "", "", 0, 1)
 
-
 def run_sync_script():
     execute_command("rm -rf tmp/index.pid", "", "", 1, 0)
     execute_command("node scripts/sync.js index update", "", "", 1, 0)
 
 def get_explorer_txs():
-    txs = collection.find({}).sort("blockindex")
+    txs = tx_collection.find({}).sort("blockindex")
     last_tx = {}
     for tx in txs:
         # pprint.pprint(tx)
@@ -166,13 +159,13 @@ rpc("getinfo", "Getinfo node 1", 2, 1)
 
 rpc("setgenerate true 100", "Start mining node1", 2, 1)
     
-notify("wait 10sec\n", 2)
-time.sleep(10)
+notify("wait 3sec\n", 2)
+time.sleep(3)
 
 rpc("setgenerate false", "Stop mining node1", 2, 1)
 
-notify("wait 1.5sec\n", 2)
-time.sleep(1.5)
+notify("wait 0.5sec\n", 2)
+time.sleep(0.5)
 
 rpc("getinfo", "Getinfo node 1", 2, 1)
 
@@ -180,16 +173,69 @@ rpc("getbalance", "Node 1 balance", 2, 1)
 
 run_sync_script()
 
-notify("wait 5sec\n", 2)
-time.sleep(5)
+notify("wait 1sec\n", 2)
+time.sleep(1)
 
-def print_explorer_blocks(last_block):
-    txs = collection.find({}).sort("blockindex")
-    last_tx = {}
-    for tx in txs:
-        print("\n\n INDEX: " + str(tx["blockindex"]))
-        print("=======> Node blockhash: " + rpc("getblockhash " + str(tx["blockindex"]), "", 0, 1, 0))
-        print("=======> Expl blockhash: " + tx["blockhash"])
+def cmp_balances():
+    addresses = list(address_collection.find({"received": {"$gt": 0}}))
+    
+    # unspent_outs = json.loads(rpc("listunspent", "", 0, 1, 0))
+
+    # for i in addresses:
+    #     print(unspent_outs, type(unspent_outs))
+    #     print("=========> Check balance on ", i["a_id"])
+    #     print("expl=>  ", i["balance"])
+    #     print("node=>  ", rpc("getbalance " + i["a_id"], "", 0, 1, 0))
+
+    node_balance = rpc("getbalance", "", 0, 1, 0)
+    explorer_balance = 0
+    for i in addresses:
+        explorer_balance += (i["received"] / 100000000) - (i["sent"] / 100000000)
+
+    print("Node balance: ", float(node_balance), "Explorer balance: ", float(explorer_balance))
+    if float(node_balance) != float(explorer_balance):
+        print("Balances are not equal")
+        return 1
+    else:
+        print("Balances are equal")
+        return 0
+
+def cmp_blocks():
+    explorer_tx_count = 0
+    i = 1
+    while True:
+        block_hash = rpc("getblockhash " + str(i), "", 0, 1, 0)
+        block_str = rpc("getblock " + block_hash, "", 0, 1, 0)
+        if "error" in block_str:
+            return 0
+        else:
+            block = json.loads(block_str)
+            explorer_txs = list(tx_collection.find({"blockindex": {"$eq": i}}))
+            node_txs = block["tx"]
+            print("BLOCK ====> ", block["height"], " NODE_TXS ====> ", len(node_txs), " EXP_TXS ====> ", len(explorer_txs))
+            print("nodehash==> ", block["hash"])
+            print("explhash==> ", explorer_txs[0]["blockhash"])
+            print("txs:\n")
+            if len(node_txs) != len(explorer_txs):
+                print("Bad block (wrong txs number)", block["height"], " NOT SYNCED")
+                return 0
+
+            for node_tx in node_txs:
+                node_tx = json.loads(rpc("gettransaction " + node_tx, "", 0, 1, 0))
+                exist = False
+                for explorer_tx in explorer_txs:
+                    if explorer_tx["txid"] == node_tx["txid"]:
+                        exist = True
+                if exist:
+                    print("Tx found >>>> ", node_tx["txid"])
+                else:
+                    print("Bad block ", block["height"], " Blocks are not synced")
+                    return 1
+            print(">>>>>>>>>>>>>>> Good block\n\n")
+        i += 1
+    print("Blocks are synced!")
+    return 0
+
 
 def fork_type1():
     notify("Fork type 1", 1)
@@ -236,20 +282,18 @@ def fork_type2():
     # delete block
     rpc("invalidateblock " + fork_block_hash, "Delete block", 2, 1)
 
-    notify("wait 1.5sec\n", 2)
-    time.sleep(1.5)
+    notify("wait 0.5sec\n", 2)
+    time.sleep(0.5)
 
     # get current block on node
     fresh_block = rpc("getbestblockhash", "Fork block hash node1", 2, 1)
     
     # get fresh block
     fork_block = json.loads(rpc("getblock " + fresh_block, "Fork block node1", 2, 1))
-    print(fork_block, type(fork_block))
 
     last_explorer_tx = get_explorer_txs()
     last_node_block = rpc("getbestblockhash", "Get best block hash", 2, 1)
 
-    print("Hash1: ", last_explorer_tx["blockhash"], "Hash2: ", last_node_block[-2])
     if last_explorer_tx["blockhash"] != last_node_block[:-2]:
         notify("Not synced", 2)
     else:
@@ -259,34 +303,29 @@ def fork_type2():
 
     rpc("setgenerate true 100", "Start mining node1", 2, 1)
         
-    notify("wait 10sec\n", 2)
-    time.sleep(10)
+    notify("wait 3sec\n", 2)
+    time.sleep(3)
 
     rpc("setgenerate false", "Stop mining node1", 2, 1)
 
-    notify("wait 1.5sec\n", 2)
-    time.sleep(1.5)
+    notify("wait 1sec\n", 2)
+    time.sleep(1)
 
     rpc("getinfo", "Getinfo node 1", 2, 1)
 
     rpc("getbalance", "Node 1 balance", 2, 1)
 
-    run_sync_script()
+    # run_sync_script()
 
-    notify("wait 1.5sec\n", 2)
-    time.sleep(1.5)
+    notify("wait 1sec\n", 2)
+    time.sleep(1)
 
-    # get fork block hash
-    best_hash = rpc("getbestblockhash", "Fork block hash node1", 2, 1)
+    # run_sync_script()
 
-    # get fork block
-    best_block = json.loads(rpc("getblock " + best_hash, "Fork block node1", 2, 1))
-
-    print_explorer_blocks(best_block["height"])
-
-    run_sync_script()
-
-
+    if cmp_blocks() or cmp_balances():
+        print("Test failed!")
+    else:
+        print("Test passed!")
 
 # fork_type1()
 fork_type2()
