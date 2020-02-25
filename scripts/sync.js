@@ -133,6 +133,7 @@ is_locked(function (exists) {
         } else if (database == 'index') {
           db.check_stats(settings.coin, function(exists) {
             if (exists == false) {
+              
               console.log('Run \'npm start\' to create database structures before running this script.');
               exit();
             } else {
@@ -169,6 +170,7 @@ is_locked(function (exists) {
                       });
                     });              
                   } else if (mode == 'check') {
+                    console.log("====================CHECK======================");
                     db.update_tx_db(settings.coin, 1, stats.count, settings.check_timeout, function(){
                       db.get_stats(settings.coin, function(nstats){
                         console.log('check complete (block: %s)', nstats.last);
