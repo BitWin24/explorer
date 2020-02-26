@@ -9,6 +9,8 @@ from pymongo import MongoClient
 
 # mongo
 # set your port
+db_user="dbuser"
+db_pass="dbpassword"
 client = MongoClient('localhost', 27017)
 db = client["explorerdb"]
 tx_collection = db["txes"]
@@ -95,6 +97,7 @@ def start_containers():
     time.sleep(1.5)
     
     notify("", 5)
+
 def run_node(number):
     # run node
     notify("Run node " + str(number), 2)
@@ -124,8 +127,10 @@ def drop_mongo():
 def create_mongo():
     # create user and database
     notify("Create user and database", 2)
-    execute_command("mongo explorerdb --eval \"db.createUser( { user: \"iquidus\", pwd: \"3xp!0reR\", roles: [ \"readWrite\" ] } )\"", "", "Load new database", 0, 1)
+    execute_command("mongo explorerdb --eval \"db.createUser( { user: \"" + db_user + "\", pwd: \"" + db_pass + "\", roles: [ \"readWrite\" ] } )\"", "", "Load new database", 0, 1)
     execute_command("mongo explorerdb --eval \"use explorerdb\"", "", "", 0, 1)
+    notify("wait 1.5sec\n", 2)
+    time.sleep(1.5)
 
 def stop_explorer():
     # Kill all explorer proccesses

@@ -6,18 +6,19 @@ This test launches bitwin node in the docker container, generates a chain of blo
 ### Requires
 
 
-* All requirements from explorer README
-* Builded explorer
+* All requirements from explorer README.md
+* Ready to use explorer
 * Docker
 * Python3
-* Pymongo module for python
+* Pymongo (pip3 install pymongo)
 
 ### Set parameters
 
-In order for everything to work correctly, you need to configure the test. Open `explorer_test_run.py` and set parameters:
+In order for everything to work correctly, you need to configure the test. Open `rollback_test_run.py` and set parameters:
 
 
     # please, set 5454 rpcport in explorer settings.json file
+    # and "user": rpcuser, "pass": rpcpassword
 
     # mongo
     # set your port
@@ -38,14 +39,14 @@ In order for everything to work correctly, you need to configure the test. Open 
 
 Enter in command line:
 
-    $ docker pull opanini/bitwin-node
+    $ docker pull opanini/bitwin-node:v3
 
 
 ### Run test
 
 Go to the root folder of the project and enter:
 
-    python3 test/rollback/explorer_fix_run.py
+    python3 test/rollback/rollback_test_run.py
 
 If the test passes successfully, you will see such an inscription:
 
@@ -55,7 +56,7 @@ If the test passes successfully, you will see such an inscription:
 
 After the test is over, you have the opportunity to use the explorer and the network node, if you no longer need this, enter:
 
-    python3 test/rollback/explorer_fix_stop.py
+    python3 test/rollback/rollback_test_stop.py
 
 Then you can delte docker image by entering:
 
