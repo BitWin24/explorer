@@ -170,7 +170,6 @@ is_locked(function (exists) {
                       });
                     });              
                   } else if (mode == 'check') {
-                    console.log("====================CHECK======================");
                     db.update_tx_db(settings.coin, 1, stats.count, settings.check_timeout, function(){
                       db.get_stats(settings.coin, function(nstats){
                         console.log('check complete (block: %s)', nstats.last);
@@ -178,21 +177,19 @@ is_locked(function (exists) {
                       });
                     });
                   } else if (mode == 'update') {
-                    console.log("UPDATE =========>                   start = " + stats.last);
                     // fix of the case when node chain is shorter then explorer chain
                     if (stats.last < 0) {
-                      stats.last = 1;
+                      stats.last = 0;
                     }
                     db.handle_rollback(stats.last, function(newStart) {
                       if (stats.last != newStart) {
                         console.log("ROLLBACK TO =========>                   start = " + newStart);
                       }
-                      console.log("=-=-=-=-=-=- ", stats.last, newStart);
                       db.update_tx_db(settings.coin, newStart, stats.count, settings.update_timeout, function(){
                         db.update_richlist('received', function(){
                           db.update_richlist('balance', function(){
                             db.get_stats(settings.coin, function(nstats){
-                              console.log('update complete (block: %s)', nstats.last);
+                              console.log('update complete (blocsk: %s)', nstats.last);
                               exit();
                             });
                           });
