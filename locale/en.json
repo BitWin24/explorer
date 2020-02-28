@@ -13,6 +13,7 @@
     "menu_movement": "Movement",
     "menu_node": "Nodes",
     "menu_network": "Network",
+    "menu_masternodesnetwork": "Master Nodes",
 
     // explorer view
     "ex_title": "Block Explorer",
