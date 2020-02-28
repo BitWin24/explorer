@@ -41,6 +41,15 @@ Enter in command line:
 
     $ docker pull opanini/bitwin-node:v3
 
+### Setup mongodb
+
+Run mongo command line interface and enter:
+
+    use explorerdb
+
+Then enter:
+
+    db.createUser({user: "dbuser", pwd: "dbpassword", roles: ["readWrite"]})
 
 ### Run test
 
