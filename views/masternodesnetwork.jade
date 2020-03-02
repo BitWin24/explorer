@@ -11,7 +11,7 @@ block content
         lengthChange: true,
         processing: true,
         ajax: {
-          url: '/ext/connections',
+          url: '/ext/mnconnections',
           dataSrc: function ( json ) {
             /*for ( var i=0;i<json.data.length; i++ ) {
               json.data[i]['timestamp'] = new Date((json.data[i]['timestamp']) * 1000).toUTCString();
@@ -25,10 +25,11 @@ block content
           }
         },
         columns: [
-          { data: 'address', width: '25%' },
-          { data: 'protocol', width: '25%' },
-          { data: 'version', width:'25%' },
-          { data: 'country', width: '25%'}
+          { data: 'rank', width: '5%' },
+          { data: 'ip', width: '30%' },
+          { data: 'addr', width: '30%' },
+          { data: 'status', width:'15%' },
+          { data: 'version', width: '20%'},
         ]
       });
     });
@@ -41,8 +42,9 @@ block content
       table#connections-table.table.table-bordered.table-striped
         thead
           tr
-            th.text-center #{settings.locale.net_address}
-            th.text-center #{settings.locale.net_protocol}
-            th.text-center #{settings.locale.net_subversion}
-            th.text-center #{settings.locale.net_country}
+            th.text-center #{settings.locale.mn_net_rank}
+            th.text-center #{settings.locale.mn_net_ip}
+            th.text-center #{settings.locale.mn_net_address}
+            th.text-center #{settings.locale.mn_net_status}
+            th.text-center #{settings.locale.mn_net_protocol}
         tbody.text-center
