@@ -44,9 +44,46 @@ mongoose.connect(dbString, function(err) {
             });
           }
         });
-      }, function() {
-        exit();
-      });
+      }, 
+      function() {
+        request({uri: 'http://127.0.0.1:' + settings.port + '/api/listmasternodes', json: true}, function (error, response, body) {
+          lib.syncLoop(body.length, function (loop) {
+            var i = loop.iteration();
+            var address = body[i].addr.split(':')[0];
+            db.find_mnpeer(address, function(peer) {
+    
+              if (peer) {
+                // peer already exists
+                loop.next();
+              } else {
+                request({uri: 'http://freegeoip.net/json/' + address, json: true}, function (error, response, geo) {
+                  db.create_mnpeer({
+                    rank: body[i].rank,
+                    network: body[i].network,
+                    txHash: body[i].txHash,
+                    outidx: body[i].outidx,
+                    status: body[i].status,
+                    addr: body[i].addr,
+                    ip: body[i].ip,
+                    version: body[i].version,
+                    lastSeen: body[i].lastSeen,
+                    activeTime: body[i].activeTime,
+                    lastpaid: body[i].lastpaid,
+                    country: ""
+                  }, function(){
+                    loop.next();
+                  });
+                });
+              }
+            });
+          }, 
+          function() {
+            exit();
+          }
+          );
+        });      
+      }
+      );
     });
   }
 });

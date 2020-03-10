@@ -69,7 +69,8 @@
     "youtube": false,
     "search": true,
     "movement": true,
-    "network": true
+    "network": true,
+    "masternodesnetwork": true
   },
 
   // index page (valid options for difficulty are POW, POS or Hybrid)

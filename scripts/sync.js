@@ -179,7 +179,7 @@ is_locked(function (exists) {
                   } else if (mode == 'update') {
                     // fix of the case when node chain is shorter then explorer chain
                     if (stats.last < 0) {
-                      stats.last = 0;
+                      stats.last = 1;
                     }
                     db.handle_rollback(stats.last, function(newStart) {
                       if (stats.last != newStart) {
