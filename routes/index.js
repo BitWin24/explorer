@@ -12,12 +12,12 @@ function route_get_block(res, blockhash) {
       if (blockhash == settings.genesis_block) {
         res.render('block', { active: 'block', block: block, confirmations: settings.confirmations, txs: 'GENESIS'});
       } else {
-        db.get_txs(block, function(txs) {
+        db.get_block_txs(block, function(txs) {
           if (txs.length > 0) {
             res.render('block', { active: 'block', block: block, confirmations: settings.confirmations, txs: txs});
           } else {
             db.create_txs(block, function(){
-              db.get_txs(block, function(ntxs) {
+              db.get_block_txs(block, function(ntxs) {
                 if (ntxs.length > 0) {
                   res.render('block', { active: 'block', block: block, confirmations: settings.confirmations, txs: ntxs});
                 } else {
@@ -96,22 +96,15 @@ function route_get_address(res, hash, count) {
   db.get_address(hash, function(address) {
     if (address) {
       var txs = [];
-      var hashes = address.txs.reverse();
+      var hashes = address.txs.reverse().map(obj => obj.addresses);
+      console.log("After address.txs.reverse()", hashes);
       if (address.txs.length < count) {
         count = address.txs.length;
       }
-      lib.syncLoop(count, function (loop) {
-        var i = loop.iteration();
-        db.get_tx(hashes[i].addresses, function(tx) {
-          if (tx) {
-            txs.push(tx);
-            loop.next();
-          } else {
-            loop.next();
-          }
-        });
-      }, function(){
-
+      db.get_txs(hashes, function(txs) {
+        if (txs === undefined) {
+          txs = []
+        }
         res.render('address', { active: 'address', address: address, txs: txs});
       });
 
