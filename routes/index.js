@@ -97,12 +97,11 @@ function route_get_address(res, hash, count) {
     if (address) {
       var txs = [];
       var hashes = address.txs.reverse().map(obj => obj.addresses);
-      console.log("After address.txs.reverse()", hashes);
       if (address.txs.length < count) {
         count = address.txs.length;
       }
       db.get_txs(hashes, function(txs) {
-        if (txs === undefined) {
+        if (!txs) {
           txs = []
         }
         res.render('address', { active: 'address', address: address, txs: txs});
