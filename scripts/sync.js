@@ -120,121 +120,134 @@ dbString = dbString + '/' + settings.dbsettings.database;
 
 is_locked(function (exists) {
   if (exists) {
-    console.log("Script already running..");
-    process.exit(0);
+    var fname = './tmp/' + database + '.pid';
+    var data = fs.readFileSync(fname);
+    try {
+      process.kill(parseInt(data),0);
+      // no exception -> process exists
+      console.log("Script already running..");
+      process.exit(0);
+    }
+    catch (e) {
+      remove_lock(function () {
+        create_lock(run);
+      });
+    }
   } else {
-    create_lock(function (){
-      console.log("script launched with pid: " + process.pid);
-      mongoose.connect(dbString, function(err) {
-        if (err) {
-          console.log('Unable to connect to database: %s', dbString);
-          console.log('Aborting');
+    create_lock(run);
+  }
+});
+
+function run(){
+  console.log("script launched with pid: " + process.pid);
+  mongoose.connect(dbString, function(err) {
+    if (err) {
+      console.log('Unable to connect to database: %s', dbString);
+      console.log('Aborting');
+      exit();
+    } else if (database == 'index') {
+      db.check_stats(settings.coin, function(exists) {
+        if (exists == false) {
+          
+          console.log('Run \'npm start\' to create database structures before running this script.');
           exit();
-        } else if (database == 'index') {
-          db.check_stats(settings.coin, function(exists) {
-            if (exists == false) {
-              
-              console.log('Run \'npm start\' to create database structures before running this script.');
-              exit();
-            } else {
-              db.update_db(settings.coin, function(){
-                db.get_stats(settings.coin, function(stats){
-                  if (settings.heavy == true) {
-                    db.update_heavy(settings.coin, stats.count, 20, function(){
-                    
-                    });
-                  }
-                  if (mode == 'reindex') {
-                    Tx.remove({}, function(err) { 
-                      Address.remove({}, function(err2) { 
-                        Richlist.update({coin: settings.coin}, {
-                          received: [],
-                          balance: [],
-                        }, function(err3) { 
-                          Stats.update({coin: settings.coin}, { 
-                            last: 0,
-                          }, function() {
-                            console.log('index cleared (reindex)');
-                          }); 
-                          db.update_tx_db(settings.coin, 1, stats.count, settings.update_timeout, function(){
-                            db.update_richlist('received', function(){
-                              db.update_richlist('balance', function(){
-                                db.get_stats(settings.coin, function(nstats){
-                                  console.log('reindex complete (block: %s)', nstats.last);
-                                  exit();
-                                });
-                              });
-                            });
-                          });
-                        });
-                      });
-                    });              
-                  } else if (mode == 'check') {
-                    db.update_tx_db(settings.coin, 1, stats.count, settings.check_timeout, function(){
-                      db.get_stats(settings.coin, function(nstats){
-                        console.log('check complete (block: %s)', nstats.last);
-                        exit();
-                      });
-                    });
-                  } else if (mode == 'update') {
-                    // fix of the case when node chain is shorter then explorer chain
-                    if (stats.last < 0) {
-                      stats.last = 1;
-                    }
-                    db.handle_rollback(stats.last, function(newStart) {
-                      if (stats.last != newStart) {
-                        console.log("ROLLBACK TO =========>                   start = " + newStart);
-                      }
-                      db.update_tx_db(settings.coin, newStart, stats.count, settings.update_timeout, function(){
+        } else {
+          db.update_db(settings.coin, function(){
+            db.get_stats(settings.coin, function(stats){
+              if (settings.heavy == true) {
+                db.update_heavy(settings.coin, stats.count, 20, function(){
+                
+                });
+              }
+              if (mode == 'reindex') {
+                Tx.remove({}, function(err) { 
+                  Address.remove({}, function(err2) { 
+                    Richlist.update({coin: settings.coin}, {
+                      received: [],
+                      balance: [],
+                    }, function(err3) { 
+                      Stats.update({coin: settings.coin}, { 
+                        last: 0,
+                      }, function() {
+                        console.log('index cleared (reindex)');
+                      }); 
+                      db.update_tx_db(settings.coin, 1, stats.count, settings.update_timeout, function(){
                         db.update_richlist('received', function(){
                           db.update_richlist('balance', function(){
                             db.get_stats(settings.coin, function(nstats){
-                              console.log('update complete (blocsk: %s)', nstats.last);
+                              console.log('reindex complete (block: %s)', nstats.last);
                               exit();
                             });
                           });
                         });
                       });
                     });
-                  }
+                  });
+                });              
+              } else if (mode == 'check') {
+                db.update_tx_db(settings.coin, 1, stats.count, settings.check_timeout, function(){
+                  db.get_stats(settings.coin, function(nstats){
+                    console.log('check complete (block: %s)', nstats.last);
+                    exit();
+                  });
                 });
-              });
-            }
+              } else if (mode == 'update') {
+                // fix of the case when node chain is shorter then explorer chain
+                if (stats.last < 0) {
+                  stats.last = 1;
+                }
+                db.handle_rollback(stats.last, function(newStart) {
+                  if (stats.last != newStart) {
+                    console.log("ROLLBACK TO =========>                   start = " + newStart);
+                  }
+                  db.update_tx_db(settings.coin, newStart, stats.count, settings.update_timeout, function(){
+                    db.update_richlist('received', function(){
+                      db.update_richlist('balance', function(){
+                        db.get_stats(settings.coin, function(nstats){
+                          console.log('update complete (blocsk: %s)', nstats.last);
+                          exit();
+                        });
+                      });
+                    });
+                  });
+                });
+              }
+            });
           });
-        } else {
-          //update markets
-          var markets = settings.markets.enabled;
-          var complete = 0;
-          for (var x = 0; x < markets.length; x++) {
-            var market = markets[x];
-            db.check_market(market, function(mkt, exists) {
-              if (exists) {
-                db.update_markets_db(mkt, function(err) {
-                  if (!err) {
-                    console.log('%s market data updated successfully.', mkt);
-                    complete++;
-                    if (complete == markets.length) {
-                      exit();
-                    }
-                  } else {
-                    console.log('%s: %s', mkt, err);
-                    complete++;
-                    if (complete == markets.length) {
-                      exit();
-                    }
-                  }
-                });
+        }
+      });
+    } else {
+      //update markets
+      var markets = settings.markets.enabled;
+      var complete = 0;
+      for (var x = 0; x < markets.length; x++) {
+        var market = markets[x];
+        db.check_market(market, function(mkt, exists) {
+          if (exists) {
+            db.update_markets_db(mkt, function(err) {
+              if (!err) {
+                console.log('%s market data updated successfully.', mkt);
+                complete++;
+                if (complete == markets.length) {
+                  exit();
+                }
               } else {
-                console.log('error: entry for %s does not exists in markets db.', mkt);
+                console.log('%s: %s', mkt, err);
                 complete++;
                 if (complete == markets.length) {
                   exit();
                 }
               }
             });
+          } else {
+            console.log('error: entry for %s does not exists in markets db.', mkt);
+            complete++;
+            if (complete == markets.length) {
+              exit();
+            }
           }
-        }
-      });
-    });
-  }
-});
+        });
+      }
+    }
+  });
+}
