@@ -49,8 +49,9 @@ mongoose.connect(dbString, function(err) {
         request({uri: 'http://127.0.0.1:' + settings.port + '/api/listmasternodes', json: true}, function (error, response, body) {
           lib.syncLoop(body.length, function (loop) {
             var i = loop.iteration();
-            var address = body[i].addr.split(':')[0];
-            db.find_mnpeer(address, function(peer) {
+            var address_port = body[i].ip;
+            var address = address_port.split(':')[0];
+            db.find_mnpeer(address_port, function(peer) {
     
               if (peer) {
                 // peer already exists
