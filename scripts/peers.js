@@ -46,45 +46,48 @@ mongoose.connect(dbString, function(err) {
         });
       }, 
       function() {
-        request({uri: 'http://127.0.0.1:' + settings.port + '/api/listmasternodes', json: true}, function (error, response, body) {
-          lib.syncLoop(body.length, function (loop) {
-            var i = loop.iteration();
-            var address_port = body[i].ip;
-            var address = address_port.split(':')[0];
-            db.find_mnpeer(address_port, function(peer) {
-    
-              if (peer) {
-                // peer already exists
-                loop.next();
-              } else {
-                request({uri: 'http://freegeoip.net/json/' + address, json: true}, function (error, response, geo) {
-                  db.create_mnpeer({
-                    rank: body[i].rank,
-                    network: body[i].network,
-                    txHash: body[i].txHash,
-                    outidx: body[i].outidx,
-                    status: body[i].status,
-                    addr: body[i].addr,
-                    ip: body[i].ip,
-                    version: body[i].version,
-                    lastSeen: body[i].lastSeen,
-                    activeTime: body[i].activeTime,
-                    lastpaid: body[i].lastpaid,
-                    country: ""
-                  }, function(){
-                    loop.next();
-                  });
-                });
-              }
-            });
-          }, 
-          function() {
-            exit();
+        var listmnUri = 'http://127.0.0.1:' + settings.port + '/api/listmasternodes';
+        request({uri: listmnUri, json: true}, function (error, response, body) {
+          if (error) {
+            return console.error(listmnUri + ' failed:', error);
           }
-          );
+          db.delete_mnpeers(function() {
+            lib.syncLoop(body.length, function (loop) {
+              var i = loop.iteration();
+              var address_port = body[i].ip;
+              var address = address_port.split(':')[0];
+              db.find_mnpeer(address_port, function(peer) {
+                if (peer) {
+                  // peer already exists
+                  loop.next();
+                } else {
+                  request({uri: 'http://freegeoip.net/json/' + address, json: true}, function (error, response, geo) {
+                    db.create_mnpeer({
+                      rank: body[i].rank,
+                      network: body[i].network,
+                      txHash: body[i].txHash,
+                      outidx: body[i].outidx,
+                      status: body[i].status,
+                      addr: body[i].addr,
+                      ip: body[i].ip,
+                      version: body[i].version,
+                      lastSeen: body[i].lastSeen,
+                      activeTime: body[i].activeTime,
+                      lastpaid: body[i].lastpaid,
+                      country: ""
+                    }, function(){
+                      loop.next();
+                    });
+                  });
+                }
+              });
+            },
+            function() {
+              exit();
+            });
+          });
         });      
-      }
-      );
+      });
     });
   }
 });
