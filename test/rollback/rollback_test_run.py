@@ -11,8 +11,9 @@ from pymongo import MongoClient
 # set your port
 db_user="dbuser"
 db_pass="dbpassword"
+db_name=""
 client = MongoClient('localhost', 27017)
-db = client["explorerdb"]
+db = client[db_name]
 tx_collection = db["txes"]
 address_collection = db["addresses"]
 
@@ -122,13 +123,13 @@ def rpc(command, msg, size, number, print_command=2):
 def drop_mongo():
     # drop database
     notify("Drop database", 2)
-    execute_command("mongo explorerdb --eval \"db.dropDatabase()\"", "", "Drop database", 0, 1)
+    execute_command("mongo " + db_name + " --eval \"db.dropDatabase()\"", "", "Drop database", 0, 1)
 
 def create_mongo():
     # create user and database
     notify("Create user and database", 2)
-    execute_command("mongo explorerdb --eval \"db.createUser( { user: \"" + db_user + "\", pwd: \"" + db_pass + "\", roles: [ \"readWrite\" ] } )\"", "", "Load new database", 0, 1)
-    execute_command("mongo explorerdb --eval \"use explorerdb\"", "", "", 0, 1)
+    execute_command("mongo " + db_name + " --eval \"db.createUser( { user: \"" + db_user + "\", pwd: \"" + db_pass + "\", roles: [ \"readWrite\" ] } )\"", "", "Load new database", 0, 1)
+    execute_command("mongo " + db_name + " --eval \"use " + db_name + "\"", "", "", 0, 1)
     notify("wait 1.5sec\n", 2)
     time.sleep(1.5)
 
@@ -158,6 +159,9 @@ def get_explorer_txs():
         last_tx = tx
     return last_tx
 
+def get_explorer_block_txs(blocknum):
+    return list(tx_collection.find({"blockindex": { "$eq": blocknum }}))
+
 def cmp_balances():
     # Balances cmp
     notify("Blocks cmp ", 2)
@@ -167,10 +171,10 @@ def cmp_balances():
     explorer_balance = 0
     
     for i in addresses:
-        explorer_balance += (i["received"] / 100000000) - (i["sent"] / 100000000)
+        explorer_balance += (i["received"] - i["sent"]) / 100000000
     print("Node balance: ", float(node_balance), "Explorer balance: ", float(explorer_balance))
    
-    if float(node_balance) != float(explorer_balance):
+    if float(node_balance) != round(float(explorer_balance), 8):
         notify("Balances are not equal", 3)
         return 1
     else:
@@ -226,6 +230,19 @@ def controll_address_check(balance_to_check):
         return 0
     else:
         notify("Bad address balance", 3)
+        return 1
+
+def check_explorer_balance(expected):
+    # Controll address check
+    notify("Controll address check ", 2)
+    
+    current_state = list(address_collection.find({"a_id": {"$eq": balance_to_check["address"]}}))
+    if current_state[0]["balance"] == balance_to_check["amount"]:
+        notify("Correct address balance", 3)
+        return 0
+    else:
+        notify("Bad address balance", 3)
+        print(current_state[0]["balance"], balance_to_check["amount"])
         return 1
 
 # def fork_type1():
@@ -309,9 +326,13 @@ def nodes_setup():
 explorer_setup()
 nodes_setup()
 rpc("setgenerate true 100", "Start mining node1", 2, 1)
-    
-notify("wait 3sec\n", 2)
-time.sleep(3)
+
+notify("wait 50sec\n", 2)
+time.sleep(50)
+
+receiver_address = 'GdXi4wsAjvXsUAvUG2gvXUkqdkdB2vBnTX'
+rpc("sendtoaddress " + receiver_address + " 1", "Create first transaction", 2, 1)
+rpc("sendtoaddress " + receiver_address + " 1", "Create second transaction", 2, 1)
 
 rpc("setgenerate false", "Stop mining node1", 2, 1)
 
@@ -321,6 +342,31 @@ time.sleep(0.5)
 rpc("getinfo", "Getinfo node 1", 2, 1)
 
 rpc("getbalance", "Node 1 balance", 2, 1)
+
+# Run sync script
+run_sync_script()
+
+# get 1 block reward address
+first_miner = get_explorer_block_txs(1)[0]["vout"][0]["addresses"]
+first_tx_id = get_explorer_block_txs(1)[0]["txid"]
+print('First miner address:', first_miner)
+rpc("setaccount " + first_miner + " first", "Set label for the first miner", 2, 1)
+rpc("getaddressesbyaccount first", "Get first miner addresses", 2, 1)
+
+# generate more blocks so transaction to self is going to block
+rpc("setgenerate true 100", "Start mining node1", 2, 1)
+
+rawtx = rpc("createrawtransaction \"[{\\\"txid\\\":\\\"" + first_tx_id + "\\\",\\\"vout\\\":0}]\" \"{\\\"" + first_miner + "\\\":9.9}\"", "Create transaction to self", 2, 1)
+signedtx = rpc("signrawtransaction " + str(rawtx).strip(), "Sign transaction to self", 2, 1)
+rpc("sendrawtransaction " + json.loads(signedtx)["hex"], "Send transaction to self", 2, 1)
+
+notify("wait 2sec\n", 2)
+time.sleep(2)
+
+rpc("setgenerate false", "Stop mining node1", 2, 1)
+
+notify("wait 1sec\n", 2)
+time.sleep(1)
 
 # Run sync script
 run_sync_script()
@@ -349,8 +395,8 @@ else:
 rpc("getinfo", "Getinfo node 1", 2, 1)
 rpc("setgenerate true 100", "Start mining node1", 2, 1)
         
-notify("wait 3sec\n", 2)
-time.sleep(3)
+notify("wait 50sec\n", 2)
+time.sleep(50)
 
 rpc("setgenerate false", "Stop mining node1", 2, 1)
 
@@ -366,7 +412,11 @@ time.sleep(1)
 # Run sync script
 run_sync_script()
 
-if cmp_balances() or cmp_blocks() or controll_address_check(balance_to_check):
+if (cmp_balances() or
+    cmp_blocks() or
+    check_explorer_balance({ 'address': first_miner, 'amount': 990000000 }) or
+    check_explorer_balance({ 'address': receiver_address, 'amount': 200000000 }) or
+    controll_address_check(balance_to_check)):
     notify("", 5)
     notify("Test failed!", 1)
 else:
